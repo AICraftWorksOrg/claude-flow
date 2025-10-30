@@ -1,0 +1,212 @@
+name: Sync from Upstream
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual trigger
+    inputs:
+      force_sync:
+        description: 'Force sync even if no changes'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for proper merge
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/ruvnet/claude-flow.git || true
+          git fetch upstream
+      
+      - name: Check for upstream changes
+        id: check_changes
+        run: |
+          # Fetch latest from upstream
+          git fetch upstream main
+          
+          # Check if upstream-sync exists
+          if git show-ref --verify --quiet refs/heads/upstream-sync; then
+            git checkout upstream-sync
+            BASE_COMMIT=$(git rev-parse HEAD)
+          else
+            BASE_COMMIT=$(git rev-parse origin/main)
+          fi
+          
+          UPSTREAM_COMMIT=$(git rev-parse upstream/main)
+          
+          if [ "$BASE_COMMIT" = "$UPSTREAM_COMMIT" ] && [ "${{ inputs.force_sync }}" != "true" ]; then
+            echo "No new upstream changes"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Upstream changes detected"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "upstream_commit=$UPSTREAM_COMMIT" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Update upstream-sync branch
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Create or update upstream-sync branch
+          git checkout -B upstream-sync upstream/main
+          git push origin upstream-sync --force
+      
+      - name: Create sync branch
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: create_branch
+        run: |
+          BRANCH_NAME="sync/upstream-$(date +%Y%m%d-%H%M%S)"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          
+          # Create new branch from main
+          git checkout main
+          git pull origin main
+          git checkout -b $BRANCH_NAME
+      
+      - name: Merge upstream changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: merge
+        continue-on-error: true
+        run: |
+          git merge upstream-sync --no-edit -m "chore: sync with upstream ruvnet/claude-flow" || {
+            echo "merge_conflict=true" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          echo "merge_conflict=false" >> $GITHUB_OUTPUT
+      
+      - name: Push sync branch
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git push origin ${{ steps.create_branch.outputs.branch_name }}
+      
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchName = '${{ steps.create_branch.outputs.branch_name }}';
+            const hasConflict = '${{ steps.merge.outputs.merge_conflict }}' === 'true';
+            const upstreamCommit = '${{ steps.check_changes.outputs.upstream_commit }}';
+            
+            const conflictWarning = hasConflict ? `
+            
+            ⚠️ **MERGE CONFLICTS DETECTED**
+            
+            This PR contains merge conflicts that need to be resolved manually.
+            Please follow the conflict resolution strategy in [FORK_STRATEGY.md](./docs/FORK_STRATEGY.md).
+            
+            **Conflict Resolution Priority**:
+            1. Configuration files → Keep AICraftWorks customizations
+            2. Source code → Accept upstream, re-apply customizations
+            3. Documentation → Merge both, keep AICraftWorks addendums
+            4. Tests → Keep both sets of tests
+            ` : '';
+            
+            const body = `## 🔄 Automated Upstream Sync
+            
+            This PR syncs the latest changes from upstream [ruvnet/claude-flow](https://github.com/ruvnet/claude-flow).
+            
+            **Upstream Commit**: ${upstreamCommit.substring(0, 7)}
+            **Sync Date**: ${new Date().toISOString().split('T')[0]}
+            ${conflictWarning}
+            
+            ### Review Checklist
+            - [ ] Review upstream CHANGELOG for breaking changes
+            - [ ] Check for conflicts with AICraftWorks customizations
+            - [ ] Verify all tests pass
+            - [ ] Test AICraftWorks-specific features
+            - [ ] Update AICraftWorks documentation if needed
+            - [ ] Deploy to staging for validation
+            
+            ### Testing Required
+            \`\`\`bash
+            # Install dependencies
+            npm install
+            
+            # Run linting
+            npm run lint
+            
+            # Run type checking
+            npm run typecheck
+            
+            # Run tests
+            npm test
+            
+            # Build project
+            npm run build
+            
+            # Test AICraftWorks integrations
+            # (Add specific test commands)
+            \`\`\`
+            
+            ### References
+            - [Fork Strategy Guide](./docs/FORK_STRATEGY.md)
+            - [Customization Guide](./docs/aicraftworks/CUSTOMIZATION_GUIDE.md)
+            - [Upstream Repository](https://github.com/ruvnet/claude-flow)
+            
+            ---
+            
+            *This PR was automatically created by the upstream sync workflow.*
+            *Review carefully before merging, especially if conflicts are present.*
+            `;
+            
+            try {
+              const { data: pr } = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔄 Sync with upstream (${new Date().toISOString().split('T')[0]})`,
+                head: branchName,
+                base: 'main',
+                body: body,
+                labels: ['upstream-sync', hasConflict ? 'merge-conflict' : 'auto-merge-candidate']
+              });
+              
+              console.log(`Created PR #${pr.number}: ${pr.html_url}`);
+              
+              // Add reviewers if configured
+              const reviewers = process.env.SYNC_REVIEWERS?.split(',').map(r => r.trim()).filter(Boolean);
+              if (reviewers && reviewers.length > 0) {
+                await github.rest.pulls.requestReviewers({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  reviewers: reviewers
+                });
+              }
+            } catch (error) {
+              console.error('Error creating PR:', error);
+              throw error;
+            }
+      
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check_changes.outputs.has_changes }}" = "true" ]; then
+            echo "✅ Upstream sync PR created successfully"
+            echo "Branch: ${{ steps.create_branch.outputs.branch_name }}"
+            if [ "${{ steps.merge.outputs.merge_conflict }}" = "true" ]; then
+              echo "⚠️  Merge conflicts detected - manual resolution required"
+            else
+              echo "✅ No conflicts - ready for review"
+            fi
+          else
+            echo "ℹ️  No upstream changes to sync"
+          fi

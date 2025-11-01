@@ -52,7 +52,7 @@ Create configuration files for your services. These are gitignored for security.
 
 ⚠️ **IMPORTANT**: Configuration files with actual credentials are gitignored and should NEVER be committed.
 
-For production:
+For prod:
 - Use Azure Key Vault for secrets
 - Use environment variables for configuration
 - Never hardcode credentials in code

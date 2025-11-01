@@ -170,7 +170,7 @@ PLAYWRIGHT_SERVICE_URL=https://your-service.playwright.ms
 PLAYWRIGHT_SERVICE_TOKEN=your-token
 
 # AICraftWorks Settings
-AICW_ENVIRONMENT=production
+AICW_ENVIRONMENT=prod
 AICW_REGION=eastus
 ```
 
@@ -346,7 +346,7 @@ If you want to test features in AICraftWorks before contributing upstream:
    # Develop and test with AICraftWorks setup
    ```
 
-2. **Prove value in production**
+2. **Prove value in prod**
    - Deploy to AICraftWorks environment
    - Gather metrics and feedback
    - Validate stability and performance
@@ -406,7 +406,7 @@ Located at `scripts/validate-aicraftworks-config.sh`:
 ### 4. Test Rigorously
 - Run full test suite after sync
 - Test AICraftWorks-specific features
-- Validate in staging before production
+- Validate in staging before prod
 
 ### 5. Version Management
 - Tag AICraftWorks releases separately
@@ -415,8 +415,8 @@ Located at `scripts/validate-aicraftworks-config.sh`:
 
 ### 6. Secret Management
 - Never commit secrets to repository
-- Use Azure Key Vault for production secrets
-- Use .env files for local development (gitignored)
+- Use Azure Key Vault for prod secrets
+- Use .env files for local dev (gitignored)
 - Document required secrets in config templates
 
 ## Troubleshooting

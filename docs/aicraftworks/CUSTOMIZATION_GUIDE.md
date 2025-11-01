@@ -83,6 +83,12 @@ Create Playwright Service configuration:
    cp config/aicraftworks/templates/.env.template .env.aicraftworks
    # Edit .env.aicraftworks
    ```
+   
+   **Environment Standards**: AICraftWorks uses standardized environment names across all repositories:
+   - `poc` - Proof of concept / experimental features
+   - `dev` - Development environment
+   - `staging` - Pre-production testing
+   - `prod` - Production environment
 
 3. **Run Tests**
    ```bash

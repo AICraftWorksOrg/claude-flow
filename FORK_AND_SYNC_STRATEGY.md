@@ -173,8 +173,8 @@ All other directories and files come from upstream and should be modified minima
 
 ### Configuration Management
 
-- ✅ Use `.env.aicraftworks` for local development (gitignored)
-- ✅ Use Azure Key Vault for production secrets
+- ✅ Use `.env.aicraftworks` for local dev (gitignored)
+- ✅ Use Azure Key Vault for prod secrets
 - ✅ Use environment variables for configuration
 - ❌ Never commit secrets to git
 - ❌ Never hardcode credentials
@@ -259,7 +259,7 @@ git cherry-pick <commit>
 - ❌ Reviewing sync PRs
 - ❌ Testing after sync
 - ❌ Creating upstream contributions
-- ❌ Deploying to production
+- ❌ Deploying to prod
 
 ## 🔧 Maintenance Schedule
 
